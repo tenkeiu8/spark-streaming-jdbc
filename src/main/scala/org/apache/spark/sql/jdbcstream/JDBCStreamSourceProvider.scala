@@ -10,29 +10,32 @@ import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 
 class JDBCStreamSource(sqlContext: SQLContext,
-                 val schema_ : Option[StructType],
-                 providerName: String,
-                 parameters: Map[String, String]) extends Source {
+                       providerName: String,
+                       parameters: Map[String, String]) extends Source {
 
-  override def schema: StructType = schema_ . getOrElse(StructType(StructField("timestamp", LongType) :: StructField("value", LongType) :: Nil))
+  val df = sqlContext.sparkSession.read.format("jdbc")
+    .options(parameters).load
+
+  override def schema: StructType = df.schema
+
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     import sqlContext.implicits._
     println("hooray!")
-/*
-    val rdd = sqlContext.sparkContext.parallelize(1 to 100).map{ x => (x.toLong,x.toLong)}
-        .map { case (x,y) => InternalRow(x,y)}
-    currentOffset += 10
-     sqlContext.internalCreateDataFrame(
-      rdd, schema, isStreaming = true)
+    /*
+        val rdd = sqlContext.sparkContext.parallelize(1 to 100).map{ x => (x.toLong,x.toLong)}
+            .map { case (x,y) => InternalRow(x,y)}
+        currentOffset += 10
+         sqlContext.internalCreateDataFrame(
+          rdd, schema, isStreaming = true)
 
-    val options = new JDBCOptions(parameters)
+        val options = new JDBCOptions(parameters)
 
-    val sc = sqlContext.sparkContext
-    val partitioningInfo = JDBCPartitioningInfo(options.partitionColumn.get, options.lowerBound.get, options.upperBound.get, options.numPartitions.get)
-    val columnPartition = JDBCRelation.columnPartition(partitioningInfo)
-    val rows: RDD[InternalRow] = JDBCRDD.scanTable(sc,schema, Array(), Array(), columnPartition, options)
-    JDBCRelation(columnPartition, options)(sqlContext.sparkSession).buildScan(Array(), Array()).asInstanceOf[RDD[InternalRow]]
-    */
+        val sc = sqlContext.sparkContext
+        val partitioningInfo = JDBCPartitioningInfo(options.partitionColumn.get, options.lowerBound.get, options.upperBound.get, options.numPartitions.get)
+        val columnPartition = JDBCRelation.columnPartition(partitioningInfo)
+        val rows: RDD[InternalRow] = JDBCRDD.scanTable(sc,schema, Array(), Array(), columnPartition, options)
+        JDBCRelation(columnPartition, options)(sqlContext.sparkSession).buildScan(Array(), Array()).asInstanceOf[RDD[InternalRow]]
+        */
 
     /*
     val rdd = sqlContext.sparkSession.read.format("jdbc")
@@ -43,10 +46,11 @@ class JDBCStreamSource(sqlContext: SQLContext,
       .asInstanceOf[RDD[InternalRow]]
       */
 
-    val rdd = sqlContext.sparkSession.read.format("jdbc")
+    val df = sqlContext.sparkSession.read.format("jdbc")
       .options(parameters).load
-        .rdd.map { case Row(cols @ _*) => InternalRow(cols:_*) }
-      //.asInstanceOf[RDD[InternalRow]]
+
+    val rdd = df.rdd.map { case Row(cols@_*) => InternalRow(cols: _*) }
+    //.asInstanceOf[RDD[InternalRow]]
 
     currentOffset += 10
 
@@ -71,16 +75,20 @@ class JDBCStreamSourceProvider extends StreamSourceProvider with DataSourceV2 {
                              schema: Option[StructType],
                              providerName: String,
                              parameters: Map[String, String]): (String, StructType) = {
-    ("testSchema", StructType(StructField("timestamp", LongType) :: StructField("value", LongType) :: Nil))
+
+    val df = sqlContext.sparkSession.read.format("jdbc")
+      .options(parameters).load
+
+    ("JDBC-schema", df.schema)
   }
 
-  override  def createSource(
-                    sqlContext: SQLContext,
-                    metadataPath: String,
-                    schema: Option[StructType],
-                    providerName: String,
-                    parameters: Map[String, String]): Source = {
+  override def createSource(
+                             sqlContext: SQLContext,
+                             metadataPath: String,
+                             schema: Option[StructType],
+                             providerName: String,
+                             parameters: Map[String, String]): Source = {
 
-    new JDBCStreamSource(sqlContext, schema, providerName, parameters)
+    new JDBCStreamSource(sqlContext, providerName, parameters)
   }
 }
