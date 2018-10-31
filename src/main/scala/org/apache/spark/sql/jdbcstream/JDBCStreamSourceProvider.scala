@@ -1,75 +1,60 @@
 package org.apache.spark.sql.jdbcstream
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartitioningInfo, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
-import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset, Source, StreamExecution}
-import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.functions._
 
 class JDBCStreamSource(sqlContext: SQLContext,
                        providerName: String,
-                       parameters: Map[String, String]) extends Source {
+                       parameters: Map[String, String]) extends Source with Logging {
 
-  val df = sqlContext.sparkSession.read.format("jdbc")
+  import sqlContext.implicits._
+
+  private val df = sqlContext.sparkSession.read.format("jdbc")
     .options(parameters).load
+
+  private val offsetColumn = parameters("offsetColumn")
 
   override def schema: StructType = df.schema
 
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    import sqlContext.implicits._
-    println("hooray!")
-    /*
-        val rdd = sqlContext.sparkContext.parallelize(1 to 100).map{ x => (x.toLong,x.toLong)}
-            .map { case (x,y) => InternalRow(x,y)}
-        currentOffset += 10
-         sqlContext.internalCreateDataFrame(
-          rdd, schema, isStreaming = true)
 
-        val options = new JDBCOptions(parameters)
+    val startOffset: Long = start match {
+      case Some(offset) => offset.json().toLong + 1
+      case None => Long.MinValue
+    }
 
-        val sc = sqlContext.sparkContext
-        val partitioningInfo = JDBCPartitioningInfo(options.partitionColumn.get, options.lowerBound.get, options.upperBound.get, options.numPartitions.get)
-        val columnPartition = JDBCRelation.columnPartition(partitioningInfo)
-        val rows: RDD[InternalRow] = JDBCRDD.scanTable(sc,schema, Array(), Array(), columnPartition, options)
-        JDBCRelation(columnPartition, options)(sqlContext.sparkSession).buildScan(Array(), Array()).asInstanceOf[RDD[InternalRow]]
-        */
+    val endOffset: Long = end.json().toLong
 
-    /*
-    val rdd = sqlContext.sparkSession.read.format("jdbc")
-      .options(Map("driver" -> driverClass,
-        "url" -> jdbcUrl, "dbtable" -> dbTable,
-        "partitionColumn" -> partitionColumn, "numPartitions" -> numPartitions, "lowerBound" -> lowerBound, "upperBound" -> upperBound)).load
-      .rdd
-      .asInstanceOf[RDD[InternalRow]]
-      */
+    val rdd = df.filter(col(offsetColumn).between(startOffset, endOffset))
+      .rdd.map { case Row(cols@_*) => InternalRow(cols: _*) }
 
-    val df = sqlContext.sparkSession.read.format("jdbc")
-      .options(parameters).load
-
-    val rdd = df.rdd.map { case Row(cols@_*) => InternalRow(cols: _*) }
-    //.asInstanceOf[RDD[InternalRow]]
-
-    currentOffset += 10
-
+    logInfo(s"Offset: ${start.toString} to ${end.toString}")
     sqlContext.internalCreateDataFrame(rdd, schema, true)
   }
 
-  @volatile private var currentOffset = 0
+  override def getOffset: Option[Offset] = {
+    val firstItem = df.orderBy(col(offsetColumn).desc).select(col(offsetColumn).cast("Long")).as[Long].head(1)
+    if (firstItem.isEmpty) None else Some(LongOffset(firstItem.head))
+  }
 
-  override def getOffset: Option[Offset] = Some(new StreamJDBCOffset(currentOffset))
-
-  override def stop(): Unit = Unit
+  override def stop(): Unit = {
+    logWarning("Stop is not implemented!")
+  }
 
 }
 
-class StreamJDBCOffset(val offset: Int) extends Offset {
-  override def json(): String = s"""{ "offset": $offset}"""
-}
+class JDBCStreamSourceProvider extends StreamSourceProvider with DataSourceV2 with DataSourceRegister {
 
-class JDBCStreamSourceProvider extends StreamSourceProvider with DataSourceV2 {
+  override def shortName(): String = "jdbc-streaming"
+
   override def sourceSchema(
                              sqlContext: SQLContext,
                              schema: Option[StructType],
@@ -79,7 +64,7 @@ class JDBCStreamSourceProvider extends StreamSourceProvider with DataSourceV2 {
     val df = sqlContext.sparkSession.read.format("jdbc")
       .options(parameters).load
 
-    ("JDBC-schema", df.schema)
+    (shortName(), df.schema)
   }
 
   override def createSource(

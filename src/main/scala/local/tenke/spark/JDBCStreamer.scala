@@ -1,8 +1,9 @@
 package local.tenke.spark
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 
-object JDBCStreamer extends App {
+object JDBCStreamer extends App with Logging {
   override def main(args: Array[String]): Unit = {
 
     val spark = SparkSession
@@ -12,11 +13,11 @@ object JDBCStreamer extends App {
       .getOrCreate()
 
     val opts = Map(
-      //"url" -> "jdbc:postgresql:postgres",
-      "url" -> "jdbc:postgresql:postgres",
+      "url" -> "jdbc:postgresql://localhost:5432/postgres",
       "dbtable" -> "test",
       "user" -> "postgres",
-      "password" -> "spark"
+      "password" -> "spark",
+      "offsetColumn" -> "col_a"
     )
 
     val stream = spark
@@ -29,6 +30,8 @@ object JDBCStreamer extends App {
       .outputMode("append")
       .format("console")
       .start()
+
+    logInfo("Streaming job started...")
 
     out.awaitTermination()
 
