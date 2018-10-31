@@ -1,9 +1,7 @@
 
-### Scala template
 *.class
 *.log
-
-/.idea/
 /spark-warehouse/
 /target/
 /project/target/
+/.idea/
