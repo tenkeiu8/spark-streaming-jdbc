@@ -1,4 +1,4 @@
-package local.tenke.spark
+package com.t3nq.spark
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
@@ -22,7 +22,7 @@ object JDBCStreamer extends App with Logging {
 
     val stream = spark
       .readStream
-      .format("org.apache.spark.sql.jdbcstream.JDBCStreamSourceProvider")
+      .format("org.apache.spark.sql.execution.streaming.sources.JDBCStreamSourceProvider")
       .options(opts)
       .load
 

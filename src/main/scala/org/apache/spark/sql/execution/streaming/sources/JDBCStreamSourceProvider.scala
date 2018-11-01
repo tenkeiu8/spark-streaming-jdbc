@@ -1,15 +1,13 @@
-package org.apache.spark.sql.jdbcstream
+package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartitioningInfo, JDBCRDD, JDBCRelation}
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
-import org.apache.spark.sql.sources.v2.DataSourceV2
-import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.sources.v2.DataSourceV2
+import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 class JDBCStreamSource(sqlContext: SQLContext,
                        providerName: String,
