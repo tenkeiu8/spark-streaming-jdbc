@@ -29,6 +29,7 @@ object JDBCStreamer extends App with Logging {
     val out = stream.writeStream
       .outputMode("append")
       .format("console")
+      .option("checkpointLocation", "target/checkopoint")
       .start()
 
     logInfo("Streaming job started...")
